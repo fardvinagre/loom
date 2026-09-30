@@ -719,6 +719,19 @@ impl<'p, 'a> Reader<'p, 'a> {
                 e(ExprKind::Call("cast".into(), vec![target, class], false))
             }
             "EX_InterfaceContext" => self.expr(field(v, "InterfaceValue")?)?,
+            // A Select node: the value of whichever case's value the index term matches, or the
+            // default term's when none does.
+            "EX_SwitchValue" => {
+                let index = self.expr(field(v, "IndexTerm")?)?;
+                let mut arms = Vec::new();
+                for case in v.get("Cases").and_then(Value::as_array).into_iter().flatten() {
+                    let value = self.expr(field(case, "CaseIndexValueTerm")?)?;
+                    let result = self.expr(field(case, "CaseTerm")?)?;
+                    arms.push((vec![value], result));
+                }
+                let default = self.expr(field(v, "DefaultTerm")?)?;
+                e(ExprKind::Match(Box::new(index), arms, Box::new(default)))
+            }
             _ if is_call(v) => {
                 let call = self.call(v, None)?;
                 if !call.outputs.is_empty() || call.value_to.is_some() || !call.reads.is_empty() {
